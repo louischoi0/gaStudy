@@ -13,7 +13,7 @@ data = [
 df = pd.DataFrame(data,index=["A","B","C","D","E"],columns=["A","B","C","D","E"])
 
 def getDistance(start,end) :
-    print("From {} to {} Distance : {}".format(start,end,df.loc[start,end]))
+    #print("From {} to {} Distance : {}".format(start,end,df.loc[start,end]))
     return df.loc[start,end]
 
 def getTotalDistance(locationList) :
@@ -32,28 +32,47 @@ def getTotalDistanceByReduce(locationList) :
 
     return reduce(subf,locationList[1:], ( locationList[0] , 0 ) )[1]
 
+def f(locationList) :
+    score = 1 / getTotalDistanceByReduce(locationList)
+    duplicated = len(locationList) - len(list(set(locationList))) 
+    duplicated = duplicated if duplicated != 0 else 1
+    #return int(score / (duplicated**2) * 10000) + 1
+    return score / (duplicated**2)
+
+def f2(locationList) :
+    return 1 / f(locationList)
+
 distanceSum = getTotalDistanceByReduce(["B","A","C","D","E","D","C","A","B"])
 print(distanceSum)
 
 class Instance :
     def __init__(self,values) :
         self.gene = values
+        self.score = 0
 
     def evaluate(self,obj) :
         print(self.gene,end="")
         print(" => {}".format(obj(self.gene)))
-        return obj(self.gene)
+        self.score = obj(self.gene)
+        return self.score
 
     def show(self) :
         print(self.gene,end="")
 
 class Enviroment :
-    def __init__(self,instanceCount) :
-        self.instancies = list(Instance(x) for x in permutations(["B","C","D","E"]))
+    def __init__(self) :
+        self.instancies = list(Instance(x) for x in permutations(["B","C","D","E"])) * 3
         self.scores = [0 for x in self.instancies]
 
-    def checkScore(self) :
-        self.scores = list(map(lambda x : x.evaluate(getTotalDistance) , self.instancies))
+    def topN(self,n) :
+        return list( ( self.instancies[x] for x in np.argsort(self.scores,)[::-1][:n] ) )
+
+    def updateScore(self,func) :
+        self.scores = list(map(lambda x : x.evaluate(func) , self.instancies))
+
+        for i in self.instancies :
+            print(i.gene,end=" : ")
+            print(i.score)
 
     def make(self) :
         total = sum(self.scores)
@@ -63,8 +82,10 @@ class Enviroment :
 
         return list(map( toProbability , self.scores))
 
-    def newPick(self,n) :
+    def pickByNumber(self,n,func=f) :
         import numpy as np
+
+        self.updateScore(func)
         r = [0] + self.make()
 
         sets = np.cumsum(r)
@@ -88,7 +109,7 @@ class Enviroment :
 
         results = []
 
-        def pickRecursivly(beforeResult=[]) :
+        def pickRecursively(beforeResult=[]) :
             p = n - len(beforeResult)
 
             r = list(set(list( pick() for _ in range(p) )))
@@ -97,66 +118,78 @@ class Enviroment :
             if n - len(r) == 0 :
                 return r 
 
-            return pickRecursivly(r)
+            return pickRecursively(r)
 
-        return pickRecursivly()
+        return pickRecursively()
 
-    def pick(self) :
-        import numpy as np
-        r = [0] + self.make()
+    def getDead(self,n) :
+        return list( ( self.instancies[x] for x in self.pickByNumber(n,f2) ) )
 
-        sets = np.cumsum(r)
+    def cross_over(self,n) :
+        goodGenes = self.pickByNumber(n*2)
+        goodGenes = list(self.instancies[x].gene for x in goodGenes)
 
-        print(sets)
-        vtuples = list(map(lambda x : (sets[x] , sets[x+1]) , range(0,len(r)-1)))
+        def chunker(seq, size):
+            return (seq[pos:pos + size] for pos in range(0, len(seq), size))
 
+        genePairs = list(chunker(goodGenes,2))
+        # [ (g0,g1) , (g2,g3), (g4,g5) ]
         from random import randint 
 
-        rvalue = randint(1,100000000) / 100000000
-        index = 0
+        def _cross_over(g1,g2) :
+            maxdp = len(g1)
+            dp = randint(1,maxdp)
 
-        for t in vtuples :
+            return Instance(g1[:dp] + g2[dp:])
 
-            if rvalue > t[0] and rvalue <= t[1] :
-                return index
+        print(genePairs[0])
 
-            index += 1
+        return list(map(lambda genep : _cross_over(*genep),genePairs))
 
-    #구조,파라미터가 어떻게 들어올지 고민
-    def cross_over(self) :
-        pass
+    def timeGoesBy(self,n) :
 
-    def next(self) :
-        """
-            1. pick -> 제일 좋은 애뽑민
-            2. 안좋은애 뽑기() ** 고민
-            3. 크로스 오버
-        """
-        self.cross_over()
+        newGenes = self.cross_over(n)
+        self.instancies.append(newGenes)
 
-        def cross_over() :
-            pass
+        badGenes = self.pickByNumber(n,f2)
+
+        #goodGenes = self.pickByNumber(6,f2)
+        # self.instancies 안좋은 놈 쁩은 거를 제외시키기
 
 
-e = Enviroment(10)
-res = e.checkScore()
+
+from sys import exit
+
+def chunker(seq, size):
+    return (seq[pos:pos + size] for pos in range(0, len(seq), size))
+
+e = Enviroment()
+e.updateScore(f)
 rullet = e.make()
 
-assert abs( sum(rullet) - 1 ) < 0.00000001
+print(rullet)
+print(sum(rullet))
+
+assert abs( sum(rullet) - 1 ) < 0.0001
 import numpy as np
 
 #positions = np.cumsum(rullet)
 #oldres = list(e.pick() for x in range(15))
 #print(oldres)
 
-res = e.newPick(15)
-print(res)
+#e.checkScore()
 
-assert len(res) == len(set(res))
+badgenes = e.getDead(5)
+list( ( i.evaluate(f2) for i in badgenes ) )
+
+exit(0)
+#newgenes = e.cross_over()
+newgenes[0].evaluate(f)
+list( ( i.evaluate(f) for i in newgenes) )
+
+
+tops = e.topN(5)
+print(tops)
+#list( ( i.evaluate(f) for i in tops ) )
+
 print("ok")
-
-
-
-
-
-
