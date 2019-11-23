@@ -4,15 +4,16 @@ from functools import reduce
 from itertools import permutations
 
 data = [
-    [ 0,5,6.4,50,11.4],
-    [ 5,0,4,54.08,9.22],
-    [ 6.4,4,0,51.97,13.15],
-    [ 50,54,51.97,0,61.07],
-    [ 11.4,9.22,13.14,61.07,0]]
+    [ 0,5,6.4,50,11.4 ],
+    [ 5,0,4,54.08,9.22 ],
+    [ 6.4,4,0,51.97,13.15 ],
+    [ 50,54,51.97,0,61.07 ],
+    [ 11.4,9.22,13.14,61.07,0 ]]
 
 df = pd.DataFrame(data,index=["A","B","C","D","E"],columns=["A","B","C","D","E"])
 
 def getDistance(start,end) :
+    print("From {} to {} Distance : {}".format(start,end,df.loc[start,end]))
     return df.loc[start,end]
 
 def getTotalDistance(locationList) :
@@ -22,6 +23,17 @@ def getTotalDistance(locationList) :
     s += getDistance(locationList[1],locationList[2])
     s += getDistance(locationList[2],locationList[3])
     return s
+
+def getTotalDistanceByReduce(locationList) :
+
+    def subf(a,b) :
+        distance = getDistance(a[0],b)
+        return ( b, a[1] + distance )
+
+    return reduce(subf,locationList[1:], ( locationList[0] , 0 ) )[1]
+
+distanceSum = getTotalDistanceByReduce(["B","A","C","D","E","D","C","A","B"])
+print(distanceSum)
 
 class Instance :
     def __init__(self,values) :
@@ -50,6 +62,44 @@ class Enviroment :
             return x / total
 
         return list(map( toProbability , self.scores))
+
+    def newPick(self,n) :
+        import numpy as np
+        r = [0] + self.make()
+
+        sets = np.cumsum(r)
+
+        print(sets)
+        vtuples = list(map(lambda x : (sets[x] , sets[x+1]) , range(0,len(r)-1)))
+
+        from random import randint 
+
+        def pick() :
+            index = 0
+            rvalue = randint(1,100000000) / 100000000
+            for t in vtuples :
+
+                if rvalue > t[0] and rvalue <= t[1] :
+                    return index
+
+                index += 1
+
+            return -1
+
+        results = []
+
+        def pickRecursivly(beforeResult=[]) :
+            p = n - len(beforeResult)
+
+            r = list(set(list( pick() for _ in range(p) )))
+            r = list(set(r + beforeResult))
+
+            if n - len(r) == 0 :
+                return r 
+
+            return pickRecursivly(r)
+
+        return pickRecursivly()
 
     def pick(self) :
         import numpy as np
@@ -91,15 +141,22 @@ class Enviroment :
 e = Enviroment(10)
 res = e.checkScore()
 rullet = e.make()
+
 assert abs( sum(rullet) - 1 ) < 0.00000001
 import numpy as np
-#positions = np.cumsum(rullet)
-p0 = e.pick()
-p1 = e.pick()
-p2 = e.pick()
-p3 = e.pick()
 
-e.instancies[p0].show()
-e.instancies[p1].show()
-e.instancies[p2].show()
-e.instancies[p3].show()
+#positions = np.cumsum(rullet)
+#oldres = list(e.pick() for x in range(15))
+#print(oldres)
+
+res = e.newPick(15)
+print(res)
+
+assert len(res) == len(set(res))
+print("ok")
+
+
+
+
+
+
